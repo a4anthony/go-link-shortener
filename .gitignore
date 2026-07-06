@@ -1,0 +1,40 @@
+# Binaries
+/bin/
+/build/
+/server
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency vendor dir
+/vendor/
+
+# Env / secrets
+.env
+.env.local
+*.local.env
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker volumes / local data
+/data/
+/tmp/
+
+# Local project/authoring notes (not part of the deliverable)
+/01-go-url-shortener-prompt.md
+/CLAUDE.md
