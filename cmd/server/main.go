@@ -18,7 +18,10 @@ import (
 	"github.com/a4anthony/go-link-shortener/internal/config"
 	"github.com/a4anthony/go-link-shortener/internal/handler"
 	"github.com/a4anthony/go-link-shortener/internal/logger"
+	"github.com/a4anthony/go-link-shortener/internal/middleware"
 	"github.com/a4anthony/go-link-shortener/internal/repository"
+	"github.com/a4anthony/go-link-shortener/internal/service"
+	"github.com/a4anthony/go-link-shortener/internal/shortcode"
 )
 
 func main() {
@@ -72,7 +75,17 @@ func run() error {
 		"redis":    func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
 	})
 
-	router := newRouter(cfg, health)
+	// --- Dependency wiring (handler -> service -> repository), no DI framework.
+	apiKeyRepo := repository.NewAPIKeyRepository(pool)
+	linkRepo := repository.NewLinkRepository(pool)
+	gen := shortcode.NewGenerator(cfg.Shortcode.Length)
+
+	authService := service.NewAuthService(apiKeyRepo, log)
+	linkService := service.NewLinkService(linkRepo, gen, nil, cfg.Shortcode.MaxCollisionRetries)
+
+	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
+
+	router := newRouter(cfg, health, authService, linkHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
@@ -107,17 +120,28 @@ func run() error {
 }
 
 // newRouter builds the Gin engine and registers routes. It is extended as
-// features land in later batches; for now it serves health and metrics.
-func newRouter(cfg *config.Config, health *handler.HealthHandler) *gin.Engine {
+// features land in later batches.
+func newRouter(
+	cfg *config.Config,
+	health *handler.HealthHandler,
+	auth middleware.Authenticator,
+	links *handler.LinkHandler,
+) *gin.Engine {
 	if !cfg.IsDev() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
 	r.Use(gin.Recovery())
 
+	// Public operational endpoints.
 	r.GET("/healthz", health.Live)
 	r.GET("/readyz", health.Ready)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Authenticated JSON API.
+	api := r.Group("/api/v1")
+	api.Use(middleware.APIKeyAuth(auth))
+	links.Register(api)
 
 	return r
 }
