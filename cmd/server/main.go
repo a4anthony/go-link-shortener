@@ -11,16 +11,20 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/a4anthony/go-link-shortener/internal/analytics"
 	"github.com/a4anthony/go-link-shortener/internal/config"
 	"github.com/a4anthony/go-link-shortener/internal/handler"
 	"github.com/a4anthony/go-link-shortener/internal/logger"
+	"github.com/a4anthony/go-link-shortener/internal/metrics"
 	"github.com/a4anthony/go-link-shortener/internal/middleware"
 	"github.com/a4anthony/go-link-shortener/internal/repository"
+	"github.com/a4anthony/go-link-shortener/internal/seed"
 	"github.com/a4anthony/go-link-shortener/internal/service"
 	"github.com/a4anthony/go-link-shortener/internal/shortcode"
 	"github.com/a4anthony/go-link-shortener/internal/webhook"
@@ -64,6 +68,13 @@ func run() error {
 	}
 	log.Info("database migrations applied")
 
+	// Seed the demo tenant + API key in dev so the service is instantly demoable.
+	if cfg.IsDev() {
+		if err := seed.Dev(ctx, repository.NewTenantRepository(pool), repository.NewAPIKeyRepository(pool), log); err != nil {
+			log.Warn("dev seed failed", "error", err)
+		}
+	}
+
 	rdb, err := repository.NewRedisClient(ctx, cfg.Redis)
 	if err != nil {
 		return err
@@ -76,6 +87,9 @@ func run() error {
 		"postgres": func(ctx context.Context) error { return pool.Ping(ctx) },
 		"redis":    func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
 	})
+
+	// Prometheus collectors registered on the default registry (served at /metrics).
+	m := metrics.New(prometheus.DefaultRegisterer)
 
 	// --- Dependency wiring (handler -> service -> repository), no DI framework.
 	apiKeyRepo := repository.NewAPIKeyRepository(pool)
@@ -94,22 +108,25 @@ func run() error {
 
 	// Analytics ingestion pipeline (buffered channel + worker pool + batcher).
 	// A no-op geo resolver ships by default; a MaxMind resolver can be injected.
-	pipeline := analytics.NewPipeline(cfg.Analytics, clickRepo, linkCache, nil, cfg.IPHashSalt, nil, log)
+	pipeline := analytics.NewPipeline(cfg.Analytics, clickRepo, linkCache, nil, cfg.IPHashSalt, m, log)
 	pipeline.SetBatchHook(notifier) // batched link.clicked webhooks
 	pipeline.Start()
 
+	// Sample the analytics queue depth into a gauge.
+	go sampleQueueDepth(ctx, pipeline, m)
+
 	authService := service.NewAuthService(apiKeyRepo, log)
 	linkService := service.NewLinkService(linkRepo, gen, notifier, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
-	redirectService := service.NewRedirectService(linkRepo, linkCache, nil, log)
+	redirectService := service.NewRedirectService(linkRepo, linkCache, m, log)
 	statsService := service.NewStatsService(clickRepo, linkRepo)
 	webhookService := service.NewWebhookService(webhookRepo)
 
 	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
 	statsHandler := handler.NewStatsHandler(statsService)
 	webhookHandler := handler.NewWebhookHandler(webhookService)
-	redirectHandler := handler.NewRedirectHandler(redirectService, handler.NewPipelineClickRecorder(pipeline))
+	redirectHandler := handler.NewRedirectHandler(redirectService, handler.NewPipelineClickRecorder(pipeline), m)
 
-	router := newRouter(cfg, health, authService, rateLimiter, linkHandler, statsHandler, webhookHandler, redirectHandler)
+	router := newRouter(cfg, log, m, health, authService, rateLimiter, linkHandler, statsHandler, webhookHandler, redirectHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
@@ -158,6 +175,8 @@ func run() error {
 // features land in later batches.
 func newRouter(
 	cfg *config.Config,
+	log *slog.Logger,
+	m *metrics.Metrics,
 	health *handler.HealthHandler,
 	auth middleware.Authenticator,
 	limiter middleware.RateLimiter,
@@ -170,7 +189,11 @@ func newRouter(
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+	// Global middleware: request id, recovery, structured logging, metrics.
+	r.Use(middleware.RequestID())
 	r.Use(gin.Recovery())
+	r.Use(middleware.RequestLogger(log))
+	r.Use(middleware.Metrics(m))
 
 	// Public operational endpoints.
 	r.GET("/healthz", health.Live)
@@ -191,4 +214,19 @@ func newRouter(
 	redirect.Register(r)
 
 	return r
+}
+
+// sampleQueueDepth periodically publishes the analytics queue depth to the gauge
+// until ctx is cancelled.
+func sampleQueueDepth(ctx context.Context, pipeline *analytics.Pipeline, m *metrics.Metrics) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.SetQueueDepth(pipeline.QueueDepth())
+		}
+	}
 }

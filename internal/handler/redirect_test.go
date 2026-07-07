@@ -46,7 +46,7 @@ func setupRedirectRouter(svc RedirectResolver, clicks ClickRecorder) *gin.Engine
 	// Register static routes alongside the wildcard to assert they coexist.
 	r.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 	r.GET("/metrics", func(c *gin.Context) { c.String(http.StatusOK, "metrics") })
-	NewRedirectHandler(svc, clicks).Register(r)
+	NewRedirectHandler(svc, clicks, nil).Register(r)
 	return r
 }
 
