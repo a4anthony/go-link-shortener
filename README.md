@@ -87,6 +87,7 @@ internal/
   seed/                   # dev demo tenant + API key
 migrations/               # golang-migrate SQL (embedded, applied at startup)
 scripts/                  # k6 / hey load tests
+web/                      # React + TS + Tailwind control console (Vite, nginx)
 ```
 
 ## Quickstart
@@ -95,12 +96,29 @@ scripts/                  # k6 / hey load tests
 docker compose up --build
 ```
 
-This starts Postgres, Redis, and the app on `:8080`. In dev mode the server
-applies migrations, seeds a demo tenant, and prints its API key:
+This starts Postgres, Redis, the API (`:8080`), and the **web console** (`:8090`).
+In dev mode the server applies migrations, seeds a demo tenant, and prints its
+API key:
 
 ```
 level=WARN msg="dev seed ready — use this API key to authenticate" api_key=sk_live_demo-seed-key
 ```
+
+### Web console
+
+A React + TypeScript + Tailwind control console lives in [`web/`](web/) and is
+served at **http://localhost:8090** by the compose stack. It manages links,
+visualizes per-link click analytics (time series + referrer/country/device
+breakdowns), and registers webhooks — all against the same API. It ships
+pre-authenticated with the dev key; change it under **Settings**. (Short-link
+redirects themselves stay on the API origin, `:8080/<code>`.)
+
+```bash
+# run the UI on its own against a running API:
+cd web && npm install && npm run dev   # http://localhost:3000, proxies /api to :8080
+```
+
+Override the console's host port if 8090 is taken: `WEB_PORT=9000 docker compose up`.
 
 Create and use a link:
 
