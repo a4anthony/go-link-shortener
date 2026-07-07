@@ -23,6 +23,7 @@ import (
 	"github.com/a4anthony/go-link-shortener/internal/repository"
 	"github.com/a4anthony/go-link-shortener/internal/service"
 	"github.com/a4anthony/go-link-shortener/internal/shortcode"
+	"github.com/a4anthony/go-link-shortener/internal/webhook"
 )
 
 func main() {
@@ -80,24 +81,35 @@ func run() error {
 	apiKeyRepo := repository.NewAPIKeyRepository(pool)
 	linkRepo := repository.NewLinkRepository(pool)
 	clickRepo := repository.NewClickRepository(pool)
+	webhookRepo := repository.NewWebhookRepository(pool)
 	linkCache := repository.NewLinkCache(rdb, cfg.Cache.LinkTTL, cfg.Cache.NegativeTTL)
+	rateLimiter := repository.NewRedisRateLimiter(rdb)
 	gen := shortcode.NewGenerator(cfg.Shortcode.Length)
+
+	// Webhook dispatcher (retries + HMAC + dead-letter). The notifier adapts
+	// domain changes into events for it.
+	dispatcher := webhook.NewDispatcher(cfg.Webhook, webhookRepo, log)
+	dispatcher.Start()
+	notifier := webhook.NewNotifier(dispatcher, cfg.BaseURL)
 
 	// Analytics ingestion pipeline (buffered channel + worker pool + batcher).
 	// A no-op geo resolver ships by default; a MaxMind resolver can be injected.
 	pipeline := analytics.NewPipeline(cfg.Analytics, clickRepo, linkCache, nil, cfg.IPHashSalt, nil, log)
+	pipeline.SetBatchHook(notifier) // batched link.clicked webhooks
 	pipeline.Start()
 
 	authService := service.NewAuthService(apiKeyRepo, log)
-	linkService := service.NewLinkService(linkRepo, gen, nil, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
+	linkService := service.NewLinkService(linkRepo, gen, notifier, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
 	redirectService := service.NewRedirectService(linkRepo, linkCache, nil, log)
 	statsService := service.NewStatsService(clickRepo, linkRepo)
+	webhookService := service.NewWebhookService(webhookRepo)
 
 	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
 	statsHandler := handler.NewStatsHandler(statsService)
+	webhookHandler := handler.NewWebhookHandler(webhookService)
 	redirectHandler := handler.NewRedirectHandler(redirectService, handler.NewPipelineClickRecorder(pipeline))
 
-	router := newRouter(cfg, health, authService, linkHandler, statsHandler, redirectHandler)
+	router := newRouter(cfg, health, authService, rateLimiter, linkHandler, statsHandler, webhookHandler, redirectHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
@@ -129,9 +141,13 @@ func run() error {
 		log.Error("graceful shutdown failed", "error", err)
 		return err
 	}
-	// ...then drain the analytics pipeline within the same deadline.
+	// ...then drain the analytics pipeline (which may emit final webhooks)...
 	if err := pipeline.Shutdown(shutdownCtx); err != nil {
 		log.Warn("analytics pipeline did not fully drain before deadline", "error", err)
+	}
+	// ...then drain the webhook dispatcher.
+	if err := dispatcher.Shutdown(shutdownCtx); err != nil {
+		log.Warn("webhook dispatcher did not fully drain before deadline", "error", err)
 	}
 
 	log.Info("shutdown complete")
@@ -144,8 +160,10 @@ func newRouter(
 	cfg *config.Config,
 	health *handler.HealthHandler,
 	auth middleware.Authenticator,
+	limiter middleware.RateLimiter,
 	links *handler.LinkHandler,
 	stats *handler.StatsHandler,
+	webhooks *handler.WebhookHandler,
 	redirect *handler.RedirectHandler,
 ) *gin.Engine {
 	if !cfg.IsDev() {
@@ -159,11 +177,15 @@ func newRouter(
 	r.GET("/readyz", health.Ready)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Authenticated JSON API.
+	// Authenticated JSON API: authenticate, then per-tenant rate limit.
 	api := r.Group("/api/v1")
 	api.Use(middleware.APIKeyAuth(auth))
+	if cfg.RateLimit.Enabled {
+		api.Use(middleware.RateLimit(limiter, cfg.RateLimit.Requests, cfg.RateLimit.Window, slog.Default()))
+	}
 	links.Register(api)
 	stats.Register(api)
+	webhooks.Register(api)
 
 	// Public redirect hot path (single-segment codes only).
 	redirect.Register(r)
