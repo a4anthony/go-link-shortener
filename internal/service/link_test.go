@@ -109,7 +109,7 @@ func (g *scriptedGen) Generate() (string, error) {
 
 func TestLinkService_Create_Generated(t *testing.T) {
 	repo := newFakeLinkRepo()
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"abc1234"}}, nil, 5)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"abc1234"}}, nil, nil, 5, testLogger())
 
 	link, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://example.com"})
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestLinkService_Create_Generated(t *testing.T) {
 
 func TestLinkService_Create_CustomAlias(t *testing.T) {
 	repo := newFakeLinkRepo()
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"x"}}, nil, 5)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"x"}}, nil, nil, 5, testLogger())
 	tenant := uuid.New()
 
 	link, err := svc.Create(context.Background(), tenant, CreateLinkInput{
@@ -136,7 +136,7 @@ func TestLinkService_Create_CustomAlias(t *testing.T) {
 }
 
 func TestLinkService_Create_InvalidAlias(t *testing.T) {
-	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"x"}}, nil, 5)
+	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"x"}}, nil, nil, 5, testLogger())
 	_, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{
 		TargetURL: "https://example.com", CustomAlias: "no spaces",
 	})
@@ -147,7 +147,7 @@ func TestLinkService_Create_CollisionRetryThenExhausted(t *testing.T) {
 	repo := newFakeLinkRepo()
 	// Pre-populate the colliding code so every generated attempt conflicts.
 	repo.byCode["dup"] = &domain.Link{ID: uuid.New(), Code: "dup", TenantID: uuid.New()}
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"dup"}}, nil, 3)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"dup"}}, nil, nil, 3, testLogger())
 
 	_, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://example.com"})
 	assert.ErrorIs(t, err, domain.ErrCodeExhausted)
@@ -156,7 +156,7 @@ func TestLinkService_Create_CollisionRetryThenExhausted(t *testing.T) {
 func TestLinkService_Create_CollisionRetrySucceeds(t *testing.T) {
 	repo := newFakeLinkRepo()
 	repo.byCode["taken"] = &domain.Link{ID: uuid.New(), Code: "taken", TenantID: uuid.New()}
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"taken", "free"}}, nil, 3)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"taken", "free"}}, nil, nil, 3, testLogger())
 
 	link, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://example.com"})
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestLinkService_Create_CollisionRetrySucceeds(t *testing.T) {
 }
 
 func TestLinkService_Create_Validation(t *testing.T) {
-	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"c"}}, nil, 5)
+	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"c"}}, nil, nil, 5, testLogger())
 	past := time.Now().Add(-time.Hour)
 	zero := int64(0)
 
@@ -189,7 +189,7 @@ func TestLinkService_Create_Validation(t *testing.T) {
 
 func TestLinkService_Update(t *testing.T) {
 	repo := newFakeLinkRepo()
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"code123"}}, nil, 5)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"code123"}}, nil, nil, 5, testLogger())
 	tenant := uuid.New()
 
 	link, err := svc.Create(context.Background(), tenant, CreateLinkInput{TargetURL: "https://old.com"})
@@ -212,14 +212,14 @@ func TestLinkService_Update(t *testing.T) {
 }
 
 func TestLinkService_Update_NotFound(t *testing.T) {
-	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"c"}}, nil, 5)
+	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"c"}}, nil, nil, 5, testLogger())
 	_, err := svc.Update(context.Background(), uuid.New(), uuid.New(), UpdateLinkInput{})
 	assert.ErrorIs(t, err, domain.ErrNotFound)
 }
 
 func TestLinkService_Delete(t *testing.T) {
 	repo := newFakeLinkRepo()
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"delme00"}}, nil, 5)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"delme00"}}, nil, nil, 5, testLogger())
 	tenant := uuid.New()
 
 	link, err := svc.Create(context.Background(), tenant, CreateLinkInput{TargetURL: "https://x.com"})
@@ -232,7 +232,7 @@ func TestLinkService_Delete(t *testing.T) {
 func TestLinkService_Create_PropagatesRepoError(t *testing.T) {
 	repo := newFakeLinkRepo()
 	repo.createErr = errors.New("db down")
-	svc := NewLinkService(repo, &scriptedGen{codes: []string{"c"}}, nil, 5)
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"c"}}, nil, nil, 5, testLogger())
 	_, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://x.com"})
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, domain.ErrValidation)
@@ -245,7 +245,7 @@ func (e *eventRecorder) LinkCreated(*domain.Link) { e.created++ }
 
 func TestLinkService_EmitsCreatedEvent(t *testing.T) {
 	rec := &eventRecorder{}
-	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"evt0000"}}, rec, 5)
+	svc := NewLinkService(newFakeLinkRepo(), &scriptedGen{codes: []string{"evt0000"}}, rec, nil, 5, testLogger())
 	_, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://x.com"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.created)

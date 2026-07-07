@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"time"
 
@@ -35,18 +36,26 @@ type LinkEventSink interface {
 	LinkCreated(l *domain.Link)
 }
 
+// LinkInvalidator drops a code from the redirect cache after a mutation so stale
+// targets are never served. Optional; a nil invalidator disables invalidation.
+type LinkInvalidator interface {
+	Invalidate(ctx context.Context, code string) error
+}
+
 // LinkService implements link CRUD and shortcode allocation.
 type LinkService struct {
 	repo         LinkRepository
 	gen          CodeGenerator
 	events       LinkEventSink
+	cache        LinkInvalidator
+	logger       *slog.Logger
 	maxCollision int
 	now          func() time.Time
 }
 
 // NewLinkService builds a LinkService. maxCollision bounds shortcode
-// regeneration attempts. events may be nil.
-func NewLinkService(repo LinkRepository, gen CodeGenerator, events LinkEventSink, maxCollision int) *LinkService {
+// regeneration attempts. events and cache may be nil.
+func NewLinkService(repo LinkRepository, gen CodeGenerator, events LinkEventSink, cache LinkInvalidator, maxCollision int, log *slog.Logger) *LinkService {
 	if maxCollision < 1 {
 		maxCollision = 1
 	}
@@ -54,6 +63,8 @@ func NewLinkService(repo LinkRepository, gen CodeGenerator, events LinkEventSink
 		repo:         repo,
 		gen:          gen,
 		events:       events,
+		cache:        cache,
+		logger:       log,
 		maxCollision: maxCollision,
 		now:          time.Now,
 	}
@@ -166,6 +177,7 @@ func (s *LinkService) Update(ctx context.Context, tenantID, id uuid.UUID, in Upd
 	if err != nil {
 		return nil, err
 	}
+	oldCode := link.Code
 
 	if in.TargetURL != nil {
 		if err := validateURL(*in.TargetURL); err != nil {
@@ -202,12 +214,37 @@ func (s *LinkService) Update(ctx context.Context, tenantID, id uuid.UUID, in Upd
 	if err := s.repo.Update(ctx, link); err != nil {
 		return nil, err
 	}
+
+	// Invalidate both the previous and (if the alias changed) the new code so no
+	// stale target is served from cache.
+	s.invalidate(ctx, oldCode)
+	if link.Code != oldCode {
+		s.invalidate(ctx, link.Code)
+	}
 	return link, nil
 }
 
-// Delete soft-deletes a tenant's link.
+// Delete soft-deletes a tenant's link and evicts it from the redirect cache.
 func (s *LinkService) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	return s.repo.SoftDelete(ctx, tenantID, id)
+	link, err := s.repo.GetByIDForTenant(ctx, tenantID, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.SoftDelete(ctx, tenantID, id); err != nil {
+		return err
+	}
+	s.invalidate(ctx, link.Code)
+	return nil
+}
+
+// invalidate best-effort evicts a code from the redirect cache.
+func (s *LinkService) invalidate(ctx context.Context, code string) {
+	if s.cache == nil {
+		return
+	}
+	if err := s.cache.Invalidate(ctx, code); err != nil && s.logger != nil {
+		s.logger.Warn("cache invalidation failed", "error", err, "code", code)
+	}
 }
 
 func (s *LinkService) emitCreated(l *domain.Link) {

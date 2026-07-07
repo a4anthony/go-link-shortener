@@ -78,14 +78,17 @@ func run() error {
 	// --- Dependency wiring (handler -> service -> repository), no DI framework.
 	apiKeyRepo := repository.NewAPIKeyRepository(pool)
 	linkRepo := repository.NewLinkRepository(pool)
+	linkCache := repository.NewLinkCache(rdb, cfg.Cache.LinkTTL, cfg.Cache.NegativeTTL)
 	gen := shortcode.NewGenerator(cfg.Shortcode.Length)
 
 	authService := service.NewAuthService(apiKeyRepo, log)
-	linkService := service.NewLinkService(linkRepo, gen, nil, cfg.Shortcode.MaxCollisionRetries)
+	linkService := service.NewLinkService(linkRepo, gen, nil, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
+	redirectService := service.NewRedirectService(linkRepo, linkCache, nil, log)
 
 	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
+	redirectHandler := handler.NewRedirectHandler(redirectService, nil)
 
-	router := newRouter(cfg, health, authService, linkHandler)
+	router := newRouter(cfg, health, authService, linkHandler, redirectHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
@@ -126,6 +129,7 @@ func newRouter(
 	health *handler.HealthHandler,
 	auth middleware.Authenticator,
 	links *handler.LinkHandler,
+	redirect *handler.RedirectHandler,
 ) *gin.Engine {
 	if !cfg.IsDev() {
 		gin.SetMode(gin.ReleaseMode)
@@ -142,6 +146,9 @@ func newRouter(
 	api := r.Group("/api/v1")
 	api.Use(middleware.APIKeyAuth(auth))
 	links.Register(api)
+
+	// Public redirect hot path (single-segment codes only).
+	redirect.Register(r)
 
 	return r
 }
