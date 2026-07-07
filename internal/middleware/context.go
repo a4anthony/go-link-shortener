@@ -51,8 +51,8 @@ func APIKeyID(c *gin.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
-// RequestID returns the request id assigned by the RequestID middleware.
-func RequestID(c *gin.Context) string {
+// GetRequestID returns the request id assigned by the RequestID middleware.
+func GetRequestID(c *gin.Context) string {
 	if v, ok := c.Get(ctxKeyRequestID); ok {
 		if s, ok := v.(string); ok {
 			return s
