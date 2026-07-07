@@ -33,6 +33,12 @@ type Observer interface {
 	IncFlushed(n int)
 }
 
+// BatchHook is notified after each batch is durably written, with the clicks
+// that were flushed. It powers batched link.clicked webhooks. Optional.
+type BatchHook interface {
+	ClicksFlushed(clicks []domain.Click)
+}
+
 // Pipeline is a buffered-channel + worker-pool + batcher that ingests clicks
 // asynchronously. Enqueue never blocks: when the buffer is full, the click is
 // dropped and counted rather than back-pressuring the redirect.
@@ -40,10 +46,11 @@ type Pipeline struct {
 	input  chan ClickEvent
 	writer ClickWriter
 	cache  CacheInvalidator
-	geo    GeoResolver
-	salt   string
-	obs    Observer
-	log    *slog.Logger
+	geo       GeoResolver
+	salt      string
+	obs       Observer
+	batchHook BatchHook
+	log       *slog.Logger
 
 	workers       int
 	batchSize     int
@@ -79,6 +86,10 @@ func NewPipeline(cfg config.AnalyticsConfig, writer ClickWriter, cache CacheInva
 		quit:          make(chan struct{}),
 	}
 }
+
+// SetBatchHook registers a hook invoked with each durably-written batch. It must
+// be called before Start.
+func (p *Pipeline) SetBatchHook(h BatchHook) { p.batchHook = h }
 
 // Start launches the worker pool. It is safe to call once; subsequent calls are
 // no-ops.
@@ -178,6 +189,9 @@ func (p *Pipeline) flush(batch []domain.Click) {
 	p.flushed.Add(int64(len(toWrite)))
 	if p.obs != nil {
 		p.obs.IncFlushed(len(toWrite))
+	}
+	if p.batchHook != nil {
+		p.batchHook.ClicksFlushed(toWrite)
 	}
 
 	for _, code := range exhausted {
