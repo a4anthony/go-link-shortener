@@ -47,6 +47,16 @@ services:
     ports:
       - "8080:8080"
 
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      - app
+    # Host port is overridable to avoid local conflicts: WEB_PORT=3000 docker compose up
+    ports:
+      - "${WEB_PORT:-8090}:80"
+
 volumes:
   pgdata:
   redisdata:
