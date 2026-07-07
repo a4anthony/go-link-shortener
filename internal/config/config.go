@@ -98,6 +98,9 @@ type WebhookConfig struct {
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
 	Timeout     time.Duration
+	// DisableAfter is the number of consecutive failed deliveries after which a
+	// webhook is dead-lettered (active=false).
+	DisableAfter int
 }
 
 // CacheConfig configures Redis-backed link caching on the redirect hot path.
@@ -156,12 +159,13 @@ func Load() (*Config, error) {
 			Enabled:  getEnvBool("RATE_LIMIT_ENABLED", true),
 		},
 		Webhook: WebhookConfig{
-			Workers:     getEnvInt("WEBHOOK_WORKERS", 4),
-			QueueSize:   getEnvInt("WEBHOOK_QUEUE_SIZE", 1000),
-			MaxRetries:  getEnvInt("WEBHOOK_MAX_RETRIES", 5),
-			BaseBackoff: getEnvDuration("WEBHOOK_BASE_BACKOFF", time.Second),
-			MaxBackoff:  getEnvDuration("WEBHOOK_MAX_BACKOFF", 5*time.Minute),
-			Timeout:     getEnvDuration("WEBHOOK_TIMEOUT", 10*time.Second),
+			Workers:      getEnvInt("WEBHOOK_WORKERS", 4),
+			QueueSize:    getEnvInt("WEBHOOK_QUEUE_SIZE", 1000),
+			MaxRetries:   getEnvInt("WEBHOOK_MAX_RETRIES", 5),
+			BaseBackoff:  getEnvDuration("WEBHOOK_BASE_BACKOFF", time.Second),
+			MaxBackoff:   getEnvDuration("WEBHOOK_MAX_BACKOFF", 5*time.Minute),
+			Timeout:      getEnvDuration("WEBHOOK_TIMEOUT", 10*time.Second),
+			DisableAfter: getEnvInt("WEBHOOK_DISABLE_AFTER", 10),
 		},
 		Cache: CacheConfig{
 			LinkTTL:     getEnvDuration("CACHE_LINK_TTL", time.Hour),
