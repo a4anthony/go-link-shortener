@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // registers the pgx5:// database driver
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
 	"github.com/a4anthony/go-link-shortener/migrations"
@@ -48,6 +48,3 @@ func toPgxURL(dsn string) string {
 		return dsn
 	}
 }
-
-// ensure the pgx driver package is referenced so its init() registers.
-var _ = pgx.Postgres{}
