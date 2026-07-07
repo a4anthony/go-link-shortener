@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/a4anthony/go-link-shortener/internal/analytics"
 	"github.com/a4anthony/go-link-shortener/internal/config"
 	"github.com/a4anthony/go-link-shortener/internal/handler"
 	"github.com/a4anthony/go-link-shortener/internal/logger"
@@ -78,17 +79,25 @@ func run() error {
 	// --- Dependency wiring (handler -> service -> repository), no DI framework.
 	apiKeyRepo := repository.NewAPIKeyRepository(pool)
 	linkRepo := repository.NewLinkRepository(pool)
+	clickRepo := repository.NewClickRepository(pool)
 	linkCache := repository.NewLinkCache(rdb, cfg.Cache.LinkTTL, cfg.Cache.NegativeTTL)
 	gen := shortcode.NewGenerator(cfg.Shortcode.Length)
+
+	// Analytics ingestion pipeline (buffered channel + worker pool + batcher).
+	// A no-op geo resolver ships by default; a MaxMind resolver can be injected.
+	pipeline := analytics.NewPipeline(cfg.Analytics, clickRepo, linkCache, nil, cfg.IPHashSalt, nil, log)
+	pipeline.Start()
 
 	authService := service.NewAuthService(apiKeyRepo, log)
 	linkService := service.NewLinkService(linkRepo, gen, nil, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
 	redirectService := service.NewRedirectService(linkRepo, linkCache, nil, log)
+	statsService := service.NewStatsService(clickRepo, linkRepo)
 
 	linkHandler := handler.NewLinkHandler(linkService, cfg.BaseURL)
-	redirectHandler := handler.NewRedirectHandler(redirectService, nil)
+	statsHandler := handler.NewStatsHandler(statsService)
+	redirectHandler := handler.NewRedirectHandler(redirectService, handler.NewPipelineClickRecorder(pipeline))
 
-	router := newRouter(cfg, health, authService, linkHandler, redirectHandler)
+	router := newRouter(cfg, health, authService, linkHandler, statsHandler, redirectHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Addr(),
@@ -114,10 +123,17 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
+
+	// Stop accepting HTTP first so no new clicks are produced...
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "error", err)
 		return err
 	}
+	// ...then drain the analytics pipeline within the same deadline.
+	if err := pipeline.Shutdown(shutdownCtx); err != nil {
+		log.Warn("analytics pipeline did not fully drain before deadline", "error", err)
+	}
+
 	log.Info("shutdown complete")
 	return nil
 }
@@ -129,6 +145,7 @@ func newRouter(
 	health *handler.HealthHandler,
 	auth middleware.Authenticator,
 	links *handler.LinkHandler,
+	stats *handler.StatsHandler,
 	redirect *handler.RedirectHandler,
 ) *gin.Engine {
 	if !cfg.IsDev() {
@@ -146,6 +163,7 @@ func newRouter(
 	api := r.Group("/api/v1")
 	api.Use(middleware.APIKeyAuth(auth))
 	links.Register(api)
+	stats.Register(api)
 
 	// Public redirect hot path (single-segment codes only).
 	redirect.Register(r)
