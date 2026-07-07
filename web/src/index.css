@@ -1,0 +1,86 @@
+@import 'tailwindcss';
+
+/*
+  Linkwire design tokens — a dark "control console" identity.
+  Monospace is the brand: codes, URLs, and HTTP verbs render in JetBrains Mono.
+  Color encodes HTTP status class: 2xx green, 3xx amber, 4xx/5xx red.
+*/
+@theme {
+  --color-bg: #0e1116;
+  --color-surface: #161b22;
+  --color-raised: #1c232d;
+  --color-border: #232b36;
+  --color-border-strong: #303a48;
+  --color-text: #e6edf3;
+  --color-muted: #8b98a5;
+  --color-faint: #5b6470;
+
+  /* Brand accent: signal amber (also the 3xx / redirect status color). */
+  --color-accent: #eab44c;
+  --color-accent-dim: #b8862f;
+
+  /* HTTP status semantics. */
+  --color-ok: #4ade80;
+  --color-redirect: #eab44c;
+  --color-error: #f87171;
+  --color-info: #7dd3fc;
+
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    background-color: var(--color-bg);
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+  /* Thin, unobtrusive scrollbars fitting the console aesthetic. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 999px;
+    border: 2px solid var(--color-bg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Subtle grid texture used behind the app shell — evokes an instrument panel. */
+.console-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
