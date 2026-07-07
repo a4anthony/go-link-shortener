@@ -32,6 +32,10 @@ type Config struct {
 	BaseURL string
 	// LogLevel is one of debug|info|warn|error.
 	LogLevel string
+	// IPHashSalt salts the SHA-256 of truncated client IPs so stored hashes are
+	// non-reversible and non-correlatable across deployments. Set a strong secret
+	// in production.
+	IPHashSalt string
 }
 
 // ServerConfig holds HTTP server tuning.
@@ -118,9 +122,10 @@ type ShortcodeConfig struct {
 // the operator can fix them in one pass.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Env:      getEnv("APP_ENV", "dev"),
-		BaseURL:  getEnv("APP_BASE_URL", "http://localhost:8080"),
-		LogLevel: getEnv("LOG_LEVEL", "info"),
+		Env:        getEnv("APP_ENV", "dev"),
+		BaseURL:    getEnv("APP_BASE_URL", "http://localhost:8080"),
+		LogLevel:   getEnv("LOG_LEVEL", "info"),
+		IPHashSalt: getEnv("IP_HASH_SALT", "dev-insecure-ip-salt-change-me"),
 		Server: ServerConfig{
 			Host:            getEnv("SERVER_HOST", "0.0.0.0"),
 			Port:            getEnvInt("SERVER_PORT", 8080),
@@ -225,6 +230,9 @@ func (c *Config) validate() error {
 	}
 	if c.Shortcode.Length < 4 || c.Shortcode.Length > 16 {
 		problems = append(problems, fmt.Sprintf("SHORTCODE_LENGTH must be 4-16, got %d", c.Shortcode.Length))
+	}
+	if c.Env == "prod" && c.IPHashSalt == "dev-insecure-ip-salt-change-me" {
+		problems = append(problems, "IP_HASH_SALT must be set to a strong secret in production")
 	}
 
 	if len(problems) > 0 {

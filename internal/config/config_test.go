@@ -25,6 +25,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_OverridesFromEnv(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
+	t.Setenv("IP_HASH_SALT", "a-strong-production-secret")
 	t.Setenv("SERVER_PORT", "9090")
 	t.Setenv("SHORTCODE_LENGTH", "10")
 	t.Setenv("ANALYTICS_FLUSH_INTERVAL", "5s")
