@@ -1,0 +1,81 @@
+# Production deployment: nginx is the single public entrypoint, serving the
+# web console and proxying the API + redirect hot path. Postgres, Redis, and
+# the app (including /metrics) are reachable only on the internal network.
+#
+# By default this ships the keyless demo playground: the shared demo tenant is
+# seeded, the console's baked-in demo key works immediately, and playground
+# links are TTL-capped, rate-limited, and janitor-purged so the tenant stays
+# bounded.
+#
+#   cp .env.prod.example .env    # fill in the secrets first
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: urlshortener
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d urlshortener"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      APP_BASE_URL: ${APP_BASE_URL:?set APP_BASE_URL in .env}
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/urlshortener?sslmode=disable
+      REDIS_ADDR: redis:6379
+      IP_HASH_SALT: ${IP_HASH_SALT:?set IP_HASH_SALT in .env}
+      # Keyless playground: seed the shared demo tenant and keep it bounded.
+      SEED_DEMO_TENANT: "${SEED_DEMO_TENANT:-true}"
+      DEMO_MAX_LINK_TTL: ${DEMO_MAX_LINK_TTL:-24h}
+      DEMO_CLEANUP_INTERVAL: ${DEMO_CLEANUP_INTERVAL:-1h}
+      DEMO_RETENTION: ${DEMO_RETENTION:-24h}
+      # Tighter than the dev default; the playground is shared by everyone.
+      RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-60}"
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1m}
+    # No published ports: nginx is the only way in from outside.
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "${WEB_PORT:-80}:80"
+
+volumes:
+  pgdata:
+  redisdata:

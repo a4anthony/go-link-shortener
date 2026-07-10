@@ -62,6 +62,14 @@ compose-up: ## Start Postgres + Redis + app via docker compose
 compose-down: ## Stop and remove docker compose stack
 	docker compose down -v
 
+.PHONY: deploy-up
+deploy-up: ## Start the production stack (requires .env; see .env.prod.example)
+	docker compose -f docker-compose.prod.yml up -d --build
+
+.PHONY: deploy-down
+deploy-down: ## Stop the production stack (volumes are kept)
+	docker compose -f docker-compose.prod.yml down
+
 .PHONY: tidy
 tidy: ## Tidy go modules
 	go mod tidy
