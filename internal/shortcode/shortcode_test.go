@@ -23,7 +23,7 @@ func TestGenerate_LengthAndAlphabet(t *testing.T) {
 func TestGenerate_Uniqueness(t *testing.T) {
 	g := NewGenerator(8)
 	seen := make(map[string]struct{}, 10000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		code, err := g.Generate()
 		require.NoError(t, err)
 		_, dup := seen[code]
@@ -37,7 +37,7 @@ func TestGenerate_DistributionAcrossAlphabet(t *testing.T) {
 	// are not stuck on a biased subset.
 	g := NewGenerator(16)
 	used := make(map[rune]struct{})
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		code, err := g.Generate()
 		require.NoError(t, err)
 		for _, r := range code {
