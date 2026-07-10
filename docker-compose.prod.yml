@@ -29,7 +29,17 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # Cap memory on small hosts: Redis here is a cache/rate-limit store, so evict
+    # least-recently-used keys rather than OOM the box. Persistence stays on for
+    # rate-limit windows that should survive a restart.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
     volumes:
       - redisdata:/data
     healthcheck:

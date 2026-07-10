@@ -187,6 +187,23 @@ and fill in the secrets) — the deploy's `git reset --hard` leaves it untouched
 Knobs: `DEPLOY_PULL=0` deploys the current tree without fetching, `DEPLOY_BRANCH`
 pins the branch, `ENV_FILE` / `COMPOSE_FILE` override the defaults.
 
+Behind a host proxy that already owns `:80/:443` (Ploi's nginx terminating TLS),
+set `WEB_PORT=8080` in `.env` and reverse-proxy the vhost to `127.0.0.1:8080`
+rather than colliding on port 80.
+
+### Backups
+
+Postgres runs in-compose on a named volume, so host-level DB backups won't see
+it. [`scripts/backup.sh`](scripts/backup.sh) streams a gzipped `pg_dump` to
+`backups/` (gitignored) and prunes old copies — run it from cron:
+
+```bash
+15 3 * * * cd /home/ploi/links.a4anthony.com && bash scripts/backup.sh >> backups/backup.log 2>&1
+```
+
+Restore with `gunzip -c backups/urlshortener-<stamp>.sql.gz | docker compose -f
+docker-compose.prod.yml exec -T postgres psql -U postgres urlshortener`.
+
 ### The demo playground
 
 By default the deployed instance is a **keyless playground**: the server seeds

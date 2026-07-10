@@ -25,6 +25,9 @@ go.work.sum
 .env.local
 *.local.env
 
+# Database backups (scripts/backup.sh)
+backups/
+
 # Editor / OS
 .idea/
 .vscode/
