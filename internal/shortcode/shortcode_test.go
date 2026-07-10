@@ -75,6 +75,7 @@ func TestValidAlias(t *testing.T) {
 		{"reserved console webhooks", "webhooks", false},
 		{"reserved console settings", "settings", false},
 		{"reserved console assets", "assets", false},
+		{"reserved console going-private", "going-private", false},
 		{"empty", "", false},
 	}
 	for _, tt := range tests {

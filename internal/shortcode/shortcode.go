@@ -30,7 +30,7 @@ var reserved = map[string]struct{}{
 	// Web console routes and its asset prefix: when the console and the
 	// redirect path share one origin (production nginx), these segments belong
 	// to the SPA and must never resolve as short links.
-	"links": {}, "webhooks": {}, "settings": {}, "assets": {},
+	"links": {}, "webhooks": {}, "settings": {}, "assets": {}, "going-private": {},
 }
 
 // Generator produces random base62 codes of a fixed length.
