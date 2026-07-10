@@ -14,7 +14,8 @@ import type {
 const KEY_STORAGE = 'linkwire.apiKey';
 const BASE_STORAGE = 'linkwire.baseUrl';
 
-// The dev seed prints this key; it's the default so the demo works immediately.
+// The seeded demo tenant's well-known key; it's the default so the playground
+// works immediately on dev servers and demo-enabled deployments.
 export const DEFAULT_API_KEY = 'sk_live_demo-seed-key';
 
 export function getApiKey(): string {

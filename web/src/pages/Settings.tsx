@@ -71,16 +71,17 @@ export function Settings() {
                 setBase('');
               }}
             >
-              Reset to dev defaults
+              Reset to demo defaults
             </Button>
           </div>
         </div>
       </Panel>
 
       <p className="mt-4 max-w-2xl text-xs text-muted">
-        In dev mode the server seeds a demo tenant and prints its key
-        (<code className="font-mono text-faint">{DEFAULT_API_KEY}</code>) to the logs. Keys are
-        stored only in this browser's local storage.
+        The console starts out using the shared demo tenant's key
+        (<code className="font-mono text-faint">{DEFAULT_API_KEY}</code>), which works on any
+        server with the demo playground enabled — including every dev server. Keys are stored
+        only in this browser's local storage.
       </p>
     </>
   );
