@@ -166,6 +166,27 @@ nginx routes by path: `/api/*` and single-segment short codes proxy to the Go
 service, console routes serve the SPA, and `/metrics` is refused at the front
 door (scrape `app:8080/metrics` on the internal network instead).
 
+### Deploying on Ploi (or any host)
+
+[`scripts/deploy.sh`](scripts/deploy.sh) is the host-agnostic source of truth for
+a deploy — Ploi, a manual SSH session, or CI all just invoke it. It resets to the
+target branch, rebuilds only changed layers, brings the stack up (the app applies
+its embedded migrations on startup once Postgres is healthy — no separate migrate
+step), size-caps the Docker build cache, and blocks until every service reports
+healthy.
+
+Point the Ploi site's **Deploy Script** at it:
+
+```bash
+cd /home/ploi/links.a4anthony.com
+DEPLOY_BRANCH=main bash scripts/deploy.sh
+```
+
+`.env` is gitignored, so create it once on the server (`cp .env.prod.example .env`
+and fill in the secrets) — the deploy's `git reset --hard` leaves it untouched.
+Knobs: `DEPLOY_PULL=0` deploys the current tree without fetching, `DEPLOY_BRANCH`
+pins the branch, `ENV_FILE` / `COMPOSE_FILE` override the defaults.
+
 ### The demo playground
 
 By default the deployed instance is a **keyless playground**: the server seeds
