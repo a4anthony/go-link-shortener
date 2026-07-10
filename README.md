@@ -188,8 +188,9 @@ Knobs: `DEPLOY_PULL=0` deploys the current tree without fetching, `DEPLOY_BRANCH
 pins the branch, `ENV_FILE` / `COMPOSE_FILE` override the defaults.
 
 Behind a host proxy that already owns `:80/:443` (Ploi's nginx terminating TLS),
-set `WEB_PORT=8080` in `.env` and reverse-proxy the vhost to `127.0.0.1:8080`
-rather than colliding on port 80.
+set `WEB_PORT` in `.env` to an uncommon high port — e.g. `18080` — and
+reverse-proxy the vhost to `127.0.0.1:18080` rather than colliding on port 80.
+An uncommon port also avoids clashing with other apps sharing the box.
 
 ### Backups
 
