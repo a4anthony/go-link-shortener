@@ -19,6 +19,7 @@ import (
 
 	"github.com/a4anthony/go-link-shortener/internal/analytics"
 	"github.com/a4anthony/go-link-shortener/internal/config"
+	"github.com/a4anthony/go-link-shortener/internal/domain"
 	"github.com/a4anthony/go-link-shortener/internal/handler"
 	"github.com/a4anthony/go-link-shortener/internal/logger"
 	"github.com/a4anthony/go-link-shortener/internal/metrics"
@@ -70,8 +71,10 @@ func run() error {
 
 	// Seed the shared demo tenant + well-known API key: always in dev, and in
 	// prod when SEED_DEMO_TENANT opts into the keyless playground deployment.
+	var demoTenant *domain.Tenant
 	if cfg.IsDev() || cfg.Demo.Seed {
-		if _, err := seed.Demo(ctx, repository.NewTenantRepository(pool), repository.NewAPIKeyRepository(pool), log); err != nil {
+		demoTenant, err = seed.Demo(ctx, repository.NewTenantRepository(pool), repository.NewAPIKeyRepository(pool), log)
+		if err != nil {
 			log.Warn("demo seed failed", "error", err)
 		}
 	}
@@ -118,6 +121,17 @@ func run() error {
 
 	authService := service.NewAuthService(apiKeyRepo, log)
 	linkService := service.NewLinkService(linkRepo, gen, notifier, linkCache, cfg.Shortcode.MaxCollisionRetries, log)
+
+	// Demo playground guardrails: cap demo link lifetimes and purge dead demo
+	// links (with their clicks) so the shared tenant stays bounded.
+	if demoTenant != nil {
+		if cfg.Demo.MaxLinkTTL > 0 {
+			linkService.SetDemoPolicy(demoTenant.ID, cfg.Demo.MaxLinkTTL)
+			log.Info("demo link TTL cap active", "max_ttl", cfg.Demo.MaxLinkTTL.String())
+		}
+		janitor := service.NewLinkJanitor(linkRepo, demoTenant.ID, cfg.Demo.CleanupInterval, cfg.Demo.Retention, log)
+		go janitor.Run(ctx)
+	}
 	redirectService := service.NewRedirectService(linkRepo, linkCache, m, log)
 	statsService := service.NewStatsService(clickRepo, linkRepo)
 	webhookService := service.NewWebhookService(webhookRepo)

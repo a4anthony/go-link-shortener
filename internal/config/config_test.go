@@ -59,6 +59,7 @@ func TestValidate(t *testing.T) {
 			RateLimit: RateLimitConfig{Requests: 10, Window: time.Minute},
 			Webhook:   WebhookConfig{MaxRetries: 3},
 			Shortcode: ShortcodeConfig{Length: 7},
+			Demo:      DemoConfig{CleanupInterval: time.Hour, Retention: 24 * time.Hour},
 		}
 	}
 
@@ -84,6 +85,9 @@ func TestValidate(t *testing.T) {
 		{"negative retries", func(c *Config) { c.Webhook.MaxRetries = -1 }, true},
 		{"shortcode too short", func(c *Config) { c.Shortcode.Length = 3 }, true},
 		{"shortcode too long", func(c *Config) { c.Shortcode.Length = 20 }, true},
+		{"negative demo ttl", func(c *Config) { c.Demo.MaxLinkTTL = -time.Hour }, true},
+		{"cleanup interval zero", func(c *Config) { c.Demo.CleanupInterval = 0 }, true},
+		{"negative retention", func(c *Config) { c.Demo.Retention = -time.Hour }, true},
 	}
 
 	for _, tt := range tests {

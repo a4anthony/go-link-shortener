@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -151,6 +152,22 @@ func (r *LinkRepository) SoftDelete(ctx context.Context, tenantID, id uuid.UUID)
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// PurgeExpired hard-deletes a tenant's links that expired or were soft-deleted
+// before cutoff, returning the number removed. Their clicks are removed by the
+// ON DELETE CASCADE on clicks.link_id. Used by the demo-tenant janitor; regular
+// tenants keep soft-deleted rows.
+func (r *LinkRepository) PurgeExpired(ctx context.Context, tenantID uuid.UUID, cutoff time.Time) (int64, error) {
+	const q = `
+		DELETE FROM links
+		WHERE tenant_id = $1
+		  AND (expires_at < $2 OR deleted_at < $2)`
+	tag, err := r.db.Exec(ctx, q, tenantID, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("purge expired links: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // ExistsByCode reports whether a live link already uses the given code. Used by

@@ -124,3 +124,51 @@ func TestLinkRepository_ExpiryAndExhaustion(t *testing.T) {
 	require.NotNil(t, got.MaxClicks)
 	assert.Equal(t, int64(5), *got.MaxClicks)
 }
+
+func TestLinkRepository_PurgeExpired(t *testing.T) {
+	pool, _ := testutil.Postgres(t)
+	ctx := context.Background()
+	tenants := repository.NewTenantRepository(pool)
+	links := repository.NewLinkRepository(pool)
+	clicks := repository.NewClickRepository(pool)
+	demo := newTenant(t, tenants, "demo")
+	other := newTenant(t, tenants, "other")
+
+	past := time.Now().Add(-2 * time.Hour)
+	future := time.Now().Add(2 * time.Hour)
+
+	expired := &domain.Link{TenantID: demo, Code: "expired1", TargetURL: "https://x.com", RedirectType: 302, ExpiresAt: &past}
+	deleted := &domain.Link{TenantID: demo, Code: "deleted1", TargetURL: "https://x.com", RedirectType: 302}
+	live := &domain.Link{TenantID: demo, Code: "live0001", TargetURL: "https://x.com", RedirectType: 302, ExpiresAt: &future}
+	permanent := &domain.Link{TenantID: demo, Code: "perm0001", TargetURL: "https://x.com", RedirectType: 302}
+	otherExpired := &domain.Link{TenantID: other, Code: "othexp01", TargetURL: "https://x.com", RedirectType: 302, ExpiresAt: &past}
+	for _, l := range []*domain.Link{expired, deleted, live, permanent, otherExpired} {
+		require.NoError(t, links.Create(ctx, l))
+	}
+	require.NoError(t, links.SoftDelete(ctx, demo, deleted.ID))
+
+	// A click on the expired link must be removed with it (FK cascade).
+	_, err := clicks.RecordBatch(ctx, []domain.Click{{LinkID: expired.ID, TenantID: demo, OccurredAt: past}})
+	require.NoError(t, err)
+
+	// Cutoff slightly in the future so the just-soft-deleted link qualifies.
+	purged, err := links.PurgeExpired(ctx, demo, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), purged, "exactly the expired and soft-deleted demo links are purged")
+
+	// Purged rows are gone entirely; live/permanent links survive.
+	_, err = links.GetByCode(ctx, "expired1")
+	assert.ErrorIs(t, err, domain.ErrNotFound)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM links WHERE tenant_id = $1`, demo).Scan(&count))
+	assert.Equal(t, 2, count)
+
+	// The cascade removed the purged link's clicks.
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM clicks WHERE link_id = $1`, expired.ID).Scan(&count))
+	assert.Equal(t, 0, count)
+
+	// Other tenants are untouched even with expired links.
+	got, err := links.GetByCode(ctx, "othexp01")
+	require.NoError(t, err)
+	assert.Equal(t, other, got.TenantID)
+}

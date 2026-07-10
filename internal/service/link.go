@@ -51,6 +51,11 @@ type LinkService struct {
 	logger       *slog.Logger
 	maxCollision int
 	now          func() time.Time
+
+	// Demo policy: links owned by demoTenantID never live longer than
+	// demoMaxTTL. Zero demoMaxTTL disables the policy.
+	demoTenantID uuid.UUID
+	demoMaxTTL   time.Duration
 }
 
 // NewLinkService builds a LinkService. maxCollision bounds shortcode
@@ -68,6 +73,29 @@ func NewLinkService(repo LinkRepository, gen CodeGenerator, events LinkEventSink
 		maxCollision: maxCollision,
 		now:          time.Now,
 	}
+}
+
+// SetDemoPolicy caps the lifetime of links owned by the shared demo tenant so a
+// public playground deployment stays bounded. Create and Update clamp missing
+// or longer expirations to now+maxTTL for that tenant. A zero maxTTL disables
+// the policy.
+func (s *LinkService) SetDemoPolicy(tenantID uuid.UUID, maxTTL time.Duration) {
+	s.demoTenantID = tenantID
+	s.demoMaxTTL = maxTTL
+}
+
+// clampDemoExpiry returns the demo-policy expiry for the given tenant and
+// requested expiration: the requested value if it is within the cap, otherwise
+// now+maxTTL. Tenants outside the policy pass through unchanged.
+func (s *LinkService) clampDemoExpiry(tenantID uuid.UUID, requested *time.Time) *time.Time {
+	if s.demoMaxTTL <= 0 || tenantID != s.demoTenantID {
+		return requested
+	}
+	capAt := s.now().Add(s.demoMaxTTL)
+	if requested != nil && requested.Before(capAt) {
+		return requested
+	}
+	return &capAt
 }
 
 // CreateLinkInput is the validated input for creating a link.
@@ -112,7 +140,7 @@ func (s *LinkService) Create(ctx context.Context, tenantID uuid.UUID, in CreateL
 		TenantID:     tenantID,
 		TargetURL:    in.TargetURL,
 		RedirectType: redirectType,
-		ExpiresAt:    in.ExpiresAt,
+		ExpiresAt:    s.clampDemoExpiry(tenantID, in.ExpiresAt),
 		MaxClicks:    in.MaxClicks,
 	}
 
@@ -210,6 +238,10 @@ func (s *LinkService) Update(ctx context.Context, tenantID, id uuid.UUID, in Upd
 		}
 		link.MaxClicks = in.MaxClicks
 	}
+
+	// The demo cap also re-applies when an expiry is cleared, so playground
+	// links can never be made permanent.
+	link.ExpiresAt = s.clampDemoExpiry(tenantID, link.ExpiresAt)
 
 	if err := s.repo.Update(ctx, link); err != nil {
 		return nil, err

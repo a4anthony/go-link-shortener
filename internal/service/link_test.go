@@ -250,3 +250,61 @@ func TestLinkService_EmitsCreatedEvent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.created)
 }
+
+func TestLinkService_DemoPolicy_CapsExpiry(t *testing.T) {
+	repo := newFakeLinkRepo()
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"demo001", "demo002", "demo003"}}, nil, nil, 5, testLogger())
+	base := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return base }
+	demoTenant := uuid.New()
+	svc.SetDemoPolicy(demoTenant, 24*time.Hour)
+	capAt := base.Add(24 * time.Hour)
+
+	// No expiry requested: the cap is applied.
+	link, err := svc.Create(context.Background(), demoTenant, CreateLinkInput{TargetURL: "https://x.com"})
+	require.NoError(t, err)
+	require.NotNil(t, link.ExpiresAt)
+	assert.True(t, link.ExpiresAt.Equal(capAt))
+
+	// Expiry beyond the cap: clamped down.
+	far := base.Add(30 * 24 * time.Hour)
+	link, err = svc.Create(context.Background(), demoTenant, CreateLinkInput{TargetURL: "https://x.com", ExpiresAt: &far})
+	require.NoError(t, err)
+	require.NotNil(t, link.ExpiresAt)
+	assert.True(t, link.ExpiresAt.Equal(capAt))
+
+	// Expiry within the cap: kept as requested.
+	soon := base.Add(time.Hour)
+	link, err = svc.Create(context.Background(), demoTenant, CreateLinkInput{TargetURL: "https://x.com", ExpiresAt: &soon})
+	require.NoError(t, err)
+	require.NotNil(t, link.ExpiresAt)
+	assert.True(t, link.ExpiresAt.Equal(soon))
+}
+
+func TestLinkService_DemoPolicy_OtherTenantsUnaffected(t *testing.T) {
+	repo := newFakeLinkRepo()
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"othr001"}}, nil, nil, 5, testLogger())
+	svc.SetDemoPolicy(uuid.New(), 24*time.Hour)
+
+	link, err := svc.Create(context.Background(), uuid.New(), CreateLinkInput{TargetURL: "https://x.com"})
+	require.NoError(t, err)
+	assert.Nil(t, link.ExpiresAt, "non-demo tenants keep permanent links")
+}
+
+func TestLinkService_DemoPolicy_UpdateCannotClearExpiry(t *testing.T) {
+	repo := newFakeLinkRepo()
+	svc := NewLinkService(repo, &scriptedGen{codes: []string{"upd0001"}}, nil, nil, 5, testLogger())
+	base := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return base }
+	demoTenant := uuid.New()
+	svc.SetDemoPolicy(demoTenant, 24*time.Hour)
+
+	link, err := svc.Create(context.Background(), demoTenant, CreateLinkInput{TargetURL: "https://x.com"})
+	require.NoError(t, err)
+
+	// Clearing the expiry on a demo link re-applies the cap instead.
+	updated, err := svc.Update(context.Background(), demoTenant, link.ID, UpdateLinkInput{ClearExpiresAt: true})
+	require.NoError(t, err)
+	require.NotNil(t, updated.ExpiresAt)
+	assert.True(t, updated.ExpiresAt.Equal(base.Add(24*time.Hour)))
+}

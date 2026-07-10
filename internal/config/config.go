@@ -130,6 +130,17 @@ type DemoConfig struct {
 	// mode. Anyone can use the demo tenant, so pair it with rate limiting and
 	// the demo link TTL cap.
 	Seed bool
+	// MaxLinkTTL caps the lifetime of links created under the demo tenant:
+	// missing or longer expirations are clamped to now+MaxLinkTTL. Zero
+	// disables the cap (links live forever, as for regular tenants).
+	MaxLinkTTL time.Duration
+	// CleanupInterval is how often the janitor sweeps the demo tenant for
+	// purgeable links.
+	CleanupInterval time.Duration
+	// Retention is how long expired or soft-deleted demo links are kept before
+	// the janitor hard-deletes them (with their clicks). The grace period keeps
+	// stats browsable for a while after a link dies.
+	Retention time.Duration
 }
 
 // Load reads configuration from the environment, applies defaults, and
@@ -188,7 +199,10 @@ func Load() (*Config, error) {
 			MaxCollisionRetries: getEnvInt("SHORTCODE_MAX_COLLISION_RETRIES", 5),
 		},
 		Demo: DemoConfig{
-			Seed: getEnvBool("SEED_DEMO_TENANT", false),
+			Seed:            getEnvBool("SEED_DEMO_TENANT", false),
+			MaxLinkTTL:      getEnvDuration("DEMO_MAX_LINK_TTL", 0),
+			CleanupInterval: getEnvDuration("DEMO_CLEANUP_INTERVAL", time.Hour),
+			Retention:       getEnvDuration("DEMO_RETENTION", 24*time.Hour),
 		},
 	}
 
@@ -252,6 +266,15 @@ func (c *Config) validate() error {
 	}
 	if c.Env == "prod" && c.IPHashSalt == "dev-insecure-ip-salt-change-me" {
 		problems = append(problems, "IP_HASH_SALT must be set to a strong secret in production")
+	}
+	if c.Demo.MaxLinkTTL < 0 {
+		problems = append(problems, "DEMO_MAX_LINK_TTL must be >= 0")
+	}
+	if c.Demo.CleanupInterval <= 0 {
+		problems = append(problems, "DEMO_CLEANUP_INTERVAL must be > 0")
+	}
+	if c.Demo.Retention < 0 {
+		problems = append(problems, "DEMO_RETENTION must be >= 0")
 	}
 
 	if len(problems) > 0 {
