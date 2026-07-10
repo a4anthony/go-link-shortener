@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { getBaseUrl } from '../lib/api';
+import { REPO_URL } from '../lib/site';
+import { DemoBanner } from './DemoBanner';
 
 const nav = [
   { to: '/', label: 'Overview', end: true, glyph: '◇' },
@@ -92,6 +94,15 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
           <NavItems />
         </div>
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 flex items-center gap-2 font-mono text-xs text-muted transition-colors hover:text-text"
+        >
+          <span aria-hidden>{'</>'}</span>
+          View source on GitHub
+        </a>
         <ConnectionStatus />
       </aside>
 
@@ -105,6 +116,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
 
       <main className="console-grid min-h-screen">
+        <DemoBanner />
         <div className="mx-auto max-w-6xl px-5 py-8 md:px-10">{children}</div>
       </main>
     </div>

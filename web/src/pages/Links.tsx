@@ -2,17 +2,16 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/Layout';
 import { CopyButton, RedirectFlow } from '../components/data';
-import { Button, Callout, EmptyState, ErrorNote, Field, Input, Panel, PanelHeader, Select, Spinner } from '../components/ui';
+import { Button, EmptyState, ErrorNote, Field, Input, Panel, PanelHeader, Select, Spinner } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/Confirm';
 import { useAsync } from '../hooks/useAsync';
-import { ApiError, api, usingDemoKey } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { formatNumber, relativeTime } from '../lib/format';
 import type { CreateLinkInput } from '../lib/types';
 
 function CreateLinkForm({ onCreated }: { onCreated: () => void }) {
   const toast = useToast();
-  const demo = usingDemoKey();
   const [url, setUrl] = useState('');
   const [alias, setAlias] = useState('');
   const [redirectType, setRedirectType] = useState('302');
@@ -48,14 +47,7 @@ function CreateLinkForm({ onCreated }: { onCreated: () => void }) {
       <PanelHeader title="New link" />
       <form onSubmit={submit} className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
         <div className="md:col-span-2">
-          <Field
-            label="Destination URL"
-            hint={
-              demo
-                ? 'Where the short link sends visitors. This is a public sandbox — anyone can see it.'
-                : 'Where the short link sends visitors.'
-            }
-          >
+          <Field label="Destination URL" hint="Where the short link sends visitors.">
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -135,21 +127,6 @@ export function Links() {
           </Button>
         }
       />
-
-      {usingDemoKey() && (
-        <div className="mb-6">
-          <Callout tone="warn">
-            <span className="font-semibold text-text">Shared demo playground.</span>{' '}
-            Every visitor uses the same demo tenant, so the links below are public — anyone can
-            view or delete them, and they auto-expire within 24h. Don't shorten anything private.
-            Add your own API key in{' '}
-            <Link to="/settings" className="underline underline-offset-2 hover:text-text">
-              Settings
-            </Link>{' '}
-            for a private workspace.
-          </Callout>
-        </div>
-      )}
 
       {showForm && <CreateLinkForm onCreated={() => { refetch(); }} />}
 

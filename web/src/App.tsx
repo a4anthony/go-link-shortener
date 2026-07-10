@@ -10,6 +10,7 @@ const Links = lazy(() => import('./pages/Links').then((m) => ({ default: m.Links
 const LinkDetail = lazy(() => import('./pages/LinkDetail').then((m) => ({ default: m.LinkDetail })));
 const Webhooks = lazy(() => import('./pages/Webhooks').then((m) => ({ default: m.Webhooks })));
 const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const GoingPrivate = lazy(() => import('./pages/GoingPrivate').then((m) => ({ default: m.GoingPrivate })));
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/links/:id" element={<LinkDetail />} />
           <Route path="/webhooks" element={<Webhooks />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/going-private" element={<GoingPrivate />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

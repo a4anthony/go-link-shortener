@@ -119,21 +119,3 @@ export function ErrorNote({ message }: { message: string }) {
     </div>
   );
 }
-
-// Tinted informational callout — same shape as ErrorNote but a neutral/info
-// tone, with body text kept at --color-text so longer copy stays readable in
-// both themes while the border + wash carry the tone.
-export function Callout({ tone = 'info', children }: { tone?: 'info' | 'warn'; children: ReactNode }) {
-  const accent = tone === 'warn' ? 'var(--color-redirect)' : 'var(--color-info)';
-  return (
-    <div
-      className="rounded-[var(--radius)] border px-4 py-3 text-sm text-text"
-      style={{
-        borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`,
-        background: `color-mix(in srgb, ${accent} 8%, transparent)`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}

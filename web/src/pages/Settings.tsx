@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/Layout';
 import { Button, Field, Input, Panel, PanelHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
@@ -81,7 +82,10 @@ export function Settings() {
         The console starts out using the shared demo tenant's key
         (<code className="font-mono text-faint">{DEFAULT_API_KEY}</code>), which works on any
         server with the demo playground enabled — including every dev server. Keys are stored
-        only in this browser's local storage.
+        only in this browser's local storage.{' '}
+        <Link to="/going-private" className="text-accent underline underline-offset-2">
+          How to go private →
+        </Link>
       </p>
     </>
   );
