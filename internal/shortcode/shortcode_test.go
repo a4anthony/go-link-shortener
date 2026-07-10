@@ -71,6 +71,10 @@ func TestValidAlias(t *testing.T) {
 		{"has dot", "my.link", false},
 		{"reserved api", "api", false},
 		{"reserved metrics", "metrics", false},
+		{"reserved console links", "links", false},
+		{"reserved console webhooks", "webhooks", false},
+		{"reserved console settings", "settings", false},
+		{"reserved console assets", "assets", false},
 		{"empty", "", false},
 	}
 	for _, tt := range tests {

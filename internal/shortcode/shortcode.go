@@ -27,6 +27,10 @@ var aliasPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{3,64}$`)
 var reserved = map[string]struct{}{
 	"api": {}, "healthz": {}, "readyz": {}, "metrics": {},
 	"admin": {}, "static": {}, "favicon.ico": {}, "robots.txt": {},
+	// Web console routes and its asset prefix: when the console and the
+	// redirect path share one origin (production nginx), these segments belong
+	// to the SPA and must never resolve as short links.
+	"links": {}, "webhooks": {}, "settings": {}, "assets": {},
 }
 
 // Generator produces random base62 codes of a fixed length.
