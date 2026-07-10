@@ -23,6 +23,7 @@ type Config struct {
 	Webhook   WebhookConfig
 	Cache     CacheConfig
 	Shortcode ShortcodeConfig
+	Demo      DemoConfig
 
 	// Env is the deployment environment: "dev" or "prod". Dev mode enables the
 	// demo tenant seed and human-friendly log output.
@@ -120,6 +121,17 @@ type ShortcodeConfig struct {
 	MaxCollisionRetries int
 }
 
+// DemoConfig controls the shared demo ("playground") tenant. The demo tenant is
+// always seeded in dev; Seed additionally enables it in prod so a deployed
+// instance is usable without account provisioning (the web console defaults to
+// the demo key).
+type DemoConfig struct {
+	// Seed provisions the demo tenant + well-known API key even outside dev
+	// mode. Anyone can use the demo tenant, so pair it with rate limiting and
+	// the demo link TTL cap.
+	Seed bool
+}
+
 // Load reads configuration from the environment, applies defaults, and
 // validates the result. It returns an error describing every problem found so
 // the operator can fix them in one pass.
@@ -174,6 +186,9 @@ func Load() (*Config, error) {
 		Shortcode: ShortcodeConfig{
 			Length:              getEnvInt("SHORTCODE_LENGTH", 7),
 			MaxCollisionRetries: getEnvInt("SHORTCODE_MAX_COLLISION_RETRIES", 5),
+		},
+		Demo: DemoConfig{
+			Seed: getEnvBool("SEED_DEMO_TENANT", false),
 		},
 	}
 

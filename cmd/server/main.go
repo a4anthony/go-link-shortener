@@ -68,10 +68,11 @@ func run() error {
 	}
 	log.Info("database migrations applied")
 
-	// Seed the demo tenant + API key in dev so the service is instantly demoable.
-	if cfg.IsDev() {
-		if err := seed.Dev(ctx, repository.NewTenantRepository(pool), repository.NewAPIKeyRepository(pool), log); err != nil {
-			log.Warn("dev seed failed", "error", err)
+	// Seed the shared demo tenant + well-known API key: always in dev, and in
+	// prod when SEED_DEMO_TENANT opts into the keyless playground deployment.
+	if cfg.IsDev() || cfg.Demo.Seed {
+		if _, err := seed.Demo(ctx, repository.NewTenantRepository(pool), repository.NewAPIKeyRepository(pool), log); err != nil {
+			log.Warn("demo seed failed", "error", err)
 		}
 	}
 

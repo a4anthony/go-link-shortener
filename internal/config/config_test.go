@@ -21,6 +21,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 7, cfg.Shortcode.Length)
 	assert.Equal(t, 10000, cfg.Analytics.BufferSize)
 	assert.True(t, cfg.RateLimit.Enabled)
+	assert.False(t, cfg.Demo.Seed, "demo seeding outside dev must be opt-in")
 }
 
 func TestLoad_OverridesFromEnv(t *testing.T) {
@@ -30,11 +31,13 @@ func TestLoad_OverridesFromEnv(t *testing.T) {
 	t.Setenv("SHORTCODE_LENGTH", "10")
 	t.Setenv("ANALYTICS_FLUSH_INTERVAL", "5s")
 	t.Setenv("RATE_LIMIT_ENABLED", "false")
+	t.Setenv("SEED_DEMO_TENANT", "true")
 
 	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.False(t, cfg.IsDev())
+	assert.True(t, cfg.Demo.Seed)
 	assert.Equal(t, 9090, cfg.Server.Port)
 	assert.Equal(t, 10, cfg.Shortcode.Length)
 	assert.Equal(t, 5*time.Second, cfg.Analytics.FlushInterval)

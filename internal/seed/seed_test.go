@@ -51,27 +51,33 @@ func (f *fakeKeys) Create(_ context.Context, tenantID uuid.UUID, name, prefix, h
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
 
-func TestDev_CreatesOnFirstRun(t *testing.T) {
+func TestDemo_CreatesOnFirstRun(t *testing.T) {
 	tenants := &fakeTenants{byName: map[string]*domain.Tenant{}}
 	keys := &fakeKeys{byHash: map[string]*domain.APIKey{}}
 
-	require.NoError(t, Dev(context.Background(), tenants, keys, discardLogger()))
+	tenant, err := Demo(context.Background(), tenants, keys, discardLogger())
+	require.NoError(t, err)
+	require.NotNil(t, tenant)
+	assert.Equal(t, DemoTenantName, tenant.Name)
 	assert.Equal(t, 1, tenants.creates)
 	assert.Equal(t, 1, keys.creates)
 
-	// The seeded key hashes to the well-known dev key.
-	_, ok := keys.byHash[domain.HashAPIKey(DevAPIKey)]
+	// The seeded key hashes to the well-known demo key.
+	_, ok := keys.byHash[domain.HashAPIKey(DemoAPIKey)]
 	assert.True(t, ok)
-	assert.True(t, domain.ValidKeyFormat(DevAPIKey), "dev key must be a valid API key format")
+	assert.True(t, domain.ValidKeyFormat(DemoAPIKey), "demo key must be a valid API key format")
 }
 
-func TestDev_Idempotent(t *testing.T) {
+func TestDemo_Idempotent(t *testing.T) {
 	tenants := &fakeTenants{byName: map[string]*domain.Tenant{}}
 	keys := &fakeKeys{byHash: map[string]*domain.APIKey{}}
 
-	require.NoError(t, Dev(context.Background(), tenants, keys, discardLogger()))
-	require.NoError(t, Dev(context.Background(), tenants, keys, discardLogger()))
+	first, err := Demo(context.Background(), tenants, keys, discardLogger())
+	require.NoError(t, err)
+	second, err := Demo(context.Background(), tenants, keys, discardLogger())
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, tenants.creates, "second run must not recreate the tenant")
 	assert.Equal(t, 1, keys.creates, "second run must not recreate the key")
+	assert.Equal(t, first.ID, second.ID, "both runs must return the same tenant")
 }

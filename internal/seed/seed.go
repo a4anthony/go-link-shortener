@@ -1,6 +1,9 @@
-// Package seed provisions development fixtures. In dev mode it ensures a demo
-// tenant and a well-known API key exist so the service is instantly demoable,
-// and prints the key to the logs.
+// Package seed provisions the shared demo ("playground") tenant. It always runs
+// in dev mode so the service is instantly demoable, and can be enabled in prod
+// via SEED_DEMO_TENANT for keyless portfolio deployments: the web console
+// defaults to the well-known demo key, so visitors can use the service without
+// creating an account. Prod deployments that seed the playground should pair it
+// with the demo link-TTL cap and janitor so the shared tenant stays bounded.
 package seed
 
 import (
@@ -13,14 +16,15 @@ import (
 	"github.com/a4anthony/go-link-shortener/internal/domain"
 )
 
-// DevTenantName is the name of the seeded demo tenant.
-const DevTenantName = "Demo Tenant"
+// DemoTenantName is the name of the seeded demo tenant.
+const DemoTenantName = "Demo Tenant"
 
-// DevAPIKey is the fixed development API key. It is deterministic so the same
-// key works across restarts; it is only ever created in dev mode. It is kept
-// deliberately short and hyphenated so it cannot be mistaken for a real Stripe
-// live key by secret scanners (production keys are long and random).
-const DevAPIKey = "sk_live_demo-seed-key" //nolint:gosec // fixed dev-only demo key, never seeded in prod
+// DemoAPIKey is the fixed, well-known API key of the demo tenant. It is
+// deterministic so the same key works across restarts and can be baked into the
+// web console as its default. It is kept deliberately short and hyphenated so
+// it cannot be mistaken for a real Stripe live key by secret scanners
+// (production keys are long and random).
+const DemoAPIKey = "sk_live_demo-seed-key" //nolint:gosec // intentionally public demo-playground key
 
 // TenantStore is the tenant persistence the seeder needs.
 type TenantStore interface {
@@ -34,29 +38,30 @@ type APIKeyStore interface {
 	Create(ctx context.Context, tenantID uuid.UUID, name, prefix, hash string) (*domain.APIKey, error)
 }
 
-// Dev ensures the demo tenant and its API key exist, then logs the key. It is
-// idempotent: repeated runs converge on the same tenant and key.
-func Dev(ctx context.Context, tenants TenantStore, keys APIKeyStore, log *slog.Logger) error {
-	tenant, err := tenants.FindByName(ctx, DevTenantName)
+// Demo ensures the demo tenant and its API key exist, logs the key, and returns
+// the tenant so callers can attach per-tenant demo policies. It is idempotent:
+// repeated runs converge on the same tenant and key.
+func Demo(ctx context.Context, tenants TenantStore, keys APIKeyStore, log *slog.Logger) (*domain.Tenant, error) {
+	tenant, err := tenants.FindByName(ctx, DemoTenantName)
 	if errors.Is(err, domain.ErrNotFound) {
-		tenant, err = tenants.Create(ctx, DevTenantName)
+		tenant, err = tenants.Create(ctx, DemoTenantName)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	hash := domain.HashAPIKey(DevAPIKey)
+	hash := domain.HashAPIKey(DemoAPIKey)
 	if _, err := keys.GetByHash(ctx, hash); errors.Is(err, domain.ErrNotFound) {
-		if _, err := keys.Create(ctx, tenant.ID, "dev-seed", domain.PrefixOf(DevAPIKey), hash); err != nil {
-			return err
+		if _, err := keys.Create(ctx, tenant.ID, "demo-seed", domain.PrefixOf(DemoAPIKey), hash); err != nil {
+			return nil, err
 		}
 	} else if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Warn("dev seed ready — use this API key to authenticate",
+	log.Warn("demo tenant ready — use this API key to authenticate",
 		"tenant_id", tenant.ID.String(),
-		"api_key", DevAPIKey,
+		"api_key", DemoAPIKey,
 	)
-	return nil
+	return tenant, nil
 }
