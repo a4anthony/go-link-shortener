@@ -101,7 +101,7 @@ In dev mode the server applies migrations, seeds a demo tenant, and prints its
 API key:
 
 ```
-level=WARN msg="dev seed ready — use this API key to authenticate" api_key=sk_live_demo-seed-key
+level=WARN msg="demo tenant ready — use this API key to authenticate" api_key=sk_live_demo-seed-key
 ```
 
 ### Web console
@@ -147,6 +147,53 @@ make test-integration # integration tests (testcontainers: real PG + Redis)
 make lint             # golangci-lint (zero errors)
 make bench            # redirect hot-path benchmarks
 make migrate-up       # apply migrations with the migrate CLI
+```
+
+## Deployment
+
+A production compose file runs the whole stack behind a single nginx front
+door: the console, the JSON API, and the redirect hot path share one origin,
+while Postgres, Redis, and the app (including `/metrics`) stay on the internal
+network.
+
+```bash
+cp .env.prod.example .env   # set APP_BASE_URL and two generated secrets
+make deploy-up              # docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The app runs with `APP_ENV=prod` (release logging, `IP_HASH_SALT` required) and
+nginx routes by path: `/api/*` and single-segment short codes proxy to the Go
+service, console routes serve the SPA, and `/metrics` is refused at the front
+door (scrape `app:8080/metrics` on the internal network instead).
+
+### The demo playground
+
+By default the deployed instance is a **keyless playground**: the server seeds
+a shared demo tenant whose well-known key (`sk_live_demo-seed-key`) is also the
+console's default, so visitors can create links and browse analytics without
+signing up. Multi-tenant auth stays fully enforced underneath — the playground
+is simply one seeded tenant that everybody shares.
+
+Guardrails keep the shared tenant bounded:
+
+| Env var | Prod default | Effect |
+|---|---|---|
+| `SEED_DEMO_TENANT` | `true` | seed the playground tenant outside dev mode |
+| `DEMO_MAX_LINK_TTL` | `24h` | demo links are clamped to this lifetime; clearing an expiry re-applies the cap |
+| `DEMO_RETENTION` | `24h` | grace before expired/deleted demo links are hard-deleted (their clicks cascade) |
+| `DEMO_CLEANUP_INTERVAL` | `1h` | janitor sweep cadence |
+| `RATE_LIMIT_REQUESTS` | `60` per `1m` | per-tenant API rate limit |
+
+For a private deployment set `SEED_DEMO_TENANT=false`; there is deliberately no
+public signup endpoint, so provision tenants with two inserts (the stored key
+hash is plain SHA-256 hex):
+
+```sql
+INSERT INTO tenants (name) VALUES ('acme') RETURNING id;
+INSERT INTO api_keys (tenant_id, name, prefix, key_hash)
+VALUES ('<tenant-id>', 'default',
+        left('sk_live_your-long-random-key', 16),
+        encode(sha256('sk_live_your-long-random-key'), 'hex'));
 ```
 
 ## API reference

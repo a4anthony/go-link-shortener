@@ -144,3 +144,29 @@ middleware **fails open** on a limiter backend error.
   redirect cache backfill/invalidation flow, the full analytics flow, the sliding
   window, and webhook dead-lettering.
 - **Benchmarks** cover the redirect service on cache-hit and cache-miss paths.
+
+## Demo playground: keyless use without abandoning auth
+
+A public portfolio deployment shouldn't force visitors to sign up, but stripping
+auth would turn the service into an open redirector. The compromise is a **shared
+demo tenant**: `SEED_DEMO_TENANT` provisions the same tenant + well-known key
+that dev mode seeds, and the web console uses that key as its default — so the
+deployed console works on first load while every request still flows through the
+normal API-key auth, tenant scoping, and rate limiting. It is one ordinary
+tenant, not a bypass.
+
+A shared, anonymous tenant needs bounds:
+
+- **TTL cap.** The link service clamps demo-tenant expirations to
+  `DEMO_MAX_LINK_TTL` (missing and cleared expirations included), so playground
+  links — including any abusive ones — age out on their own.
+- **Janitor.** A background sweeper hard-deletes demo links once they've been
+  expired or soft-deleted longer than `DEMO_RETENTION` (clicks go with them via
+  `ON DELETE CASCADE`). Hard deletion is deliberately demo-only: regular tenants
+  keep soft-deleted rows for auditability, but playground data is throwaway and
+  its codes should return to the pool.
+- **Single front door.** In the production compose, nginx is the only published
+  service: it serves the console, proxies `/api/*` and single-segment codes to
+  the app, and refuses `/metrics`. Console route segments (`links`, `webhooks`,
+  `settings`, `assets`) are reserved as aliases so the SPA and short links can
+  share an origin without shadowing.
