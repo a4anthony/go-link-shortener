@@ -6,6 +6,7 @@ import { Stat } from '../components/Stat';
 import { Bars, CodeChip, CopyButton, StatusChip } from '../components/data';
 import { Button, ErrorNote, Panel, PanelHeader, Spinner } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/Confirm';
 import { useAsync } from '../hooks/useAsync';
 import { api } from '../lib/api';
 import { formatNumber, relativeTime } from '../lib/format';
@@ -28,6 +29,7 @@ export function LinkDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const [bucket, setBucket] = useState<Bucket>('hour');
 
   const link = useAsync(() => api.getLink(id), [id]);
@@ -35,7 +37,12 @@ export function LinkDetail() {
 
   async function remove() {
     if (!link.data) return;
-    if (!confirm(`Delete link ${link.data.code}?`)) return;
+    const ok = await confirm({
+      title: `Delete link ${link.data.code}?`,
+      message: 'This frees the code for reuse and cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     try {
       await api.deleteLink(id);
       toast.success(`Deleted ${link.data.code}`);

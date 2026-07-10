@@ -3,6 +3,7 @@ import { PageHeader } from '../components/Layout';
 import { CopyButton } from '../components/data';
 import { Button, EmptyState, ErrorNote, Field, Input, Panel, PanelHeader, Spinner } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/Confirm';
 import { useAsync } from '../hooks/useAsync';
 import { ApiError, api } from '../lib/api';
 import { relativeTime } from '../lib/format';
@@ -12,6 +13,7 @@ const ALL_EVENTS: WebhookEvent[] = ['link.created', 'link.clicked'];
 
 export function Webhooks() {
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, error, loading, refetch } = useAsync(() => api.listWebhooks(), []);
   const hooks = data?.webhooks ?? [];
 
@@ -45,7 +47,12 @@ export function Webhooks() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this webhook?')) return;
+    const ok = await confirm({
+      title: 'Delete this webhook?',
+      message: 'It will stop receiving events immediately.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     try {
       await api.deleteWebhook(id);
       toast.success('Webhook deleted');

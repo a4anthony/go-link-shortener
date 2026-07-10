@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 
 type ButtonVariant = 'primary' | 'ghost' | 'danger' | 'subtle';
@@ -11,21 +12,20 @@ const buttonVariants: Record<ButtonVariant, string> = {
     'bg-transparent text-error border border-[color-mix(in_srgb,var(--color-error)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_12%,transparent)]',
 };
 
-export function Button({
-  variant = 'subtle',
-  className = '',
-  children,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }
+>(function Button({ variant = 'subtle', className = '', children, ...props }, ref) {
   return (
     <button
+      ref={ref}
       className={`inline-flex items-center justify-center gap-2 rounded-[var(--radius)] px-3.5 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
       {...props}
     >
       {children}
     </button>
   );
-}
+});
 
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -116,6 +116,24 @@ export function ErrorNote({ message }: { message: string }) {
       }}
     >
       {message}
+    </div>
+  );
+}
+
+// Tinted informational callout — same shape as ErrorNote but a neutral/info
+// tone, with body text kept at --color-text so longer copy stays readable in
+// both themes while the border + wash carry the tone.
+export function Callout({ tone = 'info', children }: { tone?: 'info' | 'warn'; children: ReactNode }) {
+  const accent = tone === 'warn' ? 'var(--color-redirect)' : 'var(--color-info)';
+  return (
+    <div
+      className="rounded-[var(--radius)] border px-4 py-3 text-sm text-text"
+      style={{
+        borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`,
+        background: `color-mix(in srgb, ${accent} 8%, transparent)`,
+      }}
+    >
+      {children}
     </div>
   );
 }

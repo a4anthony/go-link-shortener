@@ -24,6 +24,12 @@ export function getApiKey(): string {
 export function setApiKey(key: string): void {
   localStorage.setItem(KEY_STORAGE, key);
 }
+// True when the console is still on the shared demo tenant's key — every such
+// visitor authenticates as the same tenant and sees the same pool of links, so
+// the UI warns it's a public sandbox. Setting a personal key clears the notice.
+export function usingDemoKey(): boolean {
+  return getApiKey() === DEFAULT_API_KEY;
+}
 export function getBaseUrl(): string {
   // Empty string = same origin (nginx/vite proxy handles /api). Overridable for
   // pointing the console at a remote instance.

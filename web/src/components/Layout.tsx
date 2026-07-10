@@ -11,18 +11,9 @@ const nav = [
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5">
-      <span
-        className="grid h-8 w-8 place-items-center rounded-[var(--radius)] font-mono text-lg font-bold text-[#1a1205]"
-        style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-dim))' }}
-        aria-hidden
-      >
-        ⟿
-      </span>
-      <div className="leading-tight">
-        <div className="font-display text-base font-bold text-text">Linkwire</div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-faint">link console</div>
-      </div>
+    <div className="leading-tight">
+      <div className="font-display text-base font-bold text-text">Linkwire</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-faint">link console</div>
     </div>
   );
 }

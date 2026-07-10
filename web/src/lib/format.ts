@@ -3,14 +3,18 @@
 export function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const diff = Date.now() - then;
-  const sec = Math.round(diff / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  const future = diff < 0;
+  // Suffix "ago" for past times, prefix "in" for future ones.
+  const frame = (unit: string) => (future ? `in ${unit}` : `${unit} ago`);
+  const abs = Math.abs(diff);
+  const sec = Math.round(abs / 1000);
+  if (sec < 60) return frame(`${sec}s`);
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return frame(`${min}m`);
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return frame(`${hr}h`);
   const day = Math.round(hr / 24);
-  if (day < 30) return `${day}d ago`;
+  if (day < 30) return frame(`${day}d`);
   return new Date(iso).toLocaleDateString();
 }
 
