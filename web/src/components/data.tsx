@@ -83,6 +83,56 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
   );
 }
 
+/** Small shared action-button styling, matching CopyButton. */
+const actionBtn =
+  'inline-flex items-center gap-1 rounded border border-border px-2 py-1 font-mono text-xs text-muted transition-colors hover:border-border-strong hover:text-text';
+
+/** OpenLinkButton opens the short link in a new tab (follows the real redirect). */
+export function OpenLinkButton({ url, label = 'Open' }: { url: string; label?: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer noopener" className={actionBtn} aria-label={`${label} in new tab`}>
+      ↗ {label}
+    </a>
+  );
+}
+
+/**
+ * ShareButton uses the native Web Share sheet where available (mobile + some
+ * desktop browsers) and falls back to copying the URL to the clipboard so the
+ * action always does something useful.
+ */
+export function ShareButton({ url, title = 'Short link', label = 'Share' }: { url: string; title?: string; label?: string }) {
+  const toast = useToast();
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      className={actionBtn}
+      aria-label="Share link"
+      onClick={async () => {
+        if (navigator.share) {
+          try {
+            await navigator.share({ title, url });
+            return;
+          } catch (err) {
+            // User dismissed the sheet — not an error; anything else falls through to copy.
+            if ((err as Error)?.name === 'AbortError') return;
+          }
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          setDone(true);
+          toast.success('Link copied to share');
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          toast.error('Could not share');
+        }
+      }}
+    >
+      {done ? '✓ copied' : `⇱ ${label}`}
+    </button>
+  );
+}
+
 /** Bars renders a labelled breakdown (referrers, countries, devices) as
  *  max-normalized horizontal bars. */
 export function Bars({ data, empty }: { data: LabelCount[] | null; empty: string }) {

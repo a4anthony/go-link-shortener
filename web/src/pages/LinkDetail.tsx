@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../components/Layout';
 import { Stat } from '../components/Stat';
-import { Bars, CodeChip, CopyButton, StatusChip } from '../components/data';
+import { Bars, CodeChip, CopyButton, OpenLinkButton, ShareButton, StatusChip } from '../components/data';
 import { Button, ErrorNote, Panel, PanelHeader, Spinner } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/Confirm';
@@ -70,7 +70,9 @@ export function LinkDetail() {
           <PageHeader
             title={link.data.code}
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <OpenLinkButton url={link.data.short_url} />
+                <ShareButton url={link.data.short_url} title={`Short link ${link.data.code}`} />
                 <CopyButton value={link.data.short_url} label="Copy URL" />
                 <Button variant="danger" onClick={remove}>
                   Delete

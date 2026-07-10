@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/Layout';
-import { CopyButton, RedirectFlow } from '../components/data';
+import { CopyButton, OpenLinkButton, RedirectFlow, ShareButton } from '../components/data';
 import { Button, EmptyState, ErrorNote, Field, Input, Panel, PanelHeader, Select, Spinner } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/Confirm';
@@ -159,7 +159,9 @@ export function Links() {
                       {relativeTime(l.created_at)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <OpenLinkButton url={l.short_url} />
+                    <ShareButton url={l.short_url} title={`Short link ${l.code}`} />
                     <CopyButton value={l.short_url} label="Copy URL" />
                     <Link to={`/links/${l.id}`}>
                       <Button variant="subtle" className="text-xs">
